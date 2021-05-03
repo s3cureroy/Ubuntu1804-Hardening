@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Declare commands paths.
+# Declare commands paths. 
 c_echo=$(which echo)
 c_cat=$(which cat)
 c_apt=$(which apt)
@@ -159,7 +159,40 @@ f_hardening(){
     read answer
     case ${answer} in
         S|s|Y|y) 
-            # Kernel Parámeters.
+            # KERNEL MODULES
+            ## Disable unused FS (Reduce local attack surface.)
+            ### cramfs 
+            ${c_modprobe} -n -v cramfs | ${c_grep} "^install /bin/true$" || ${c_echo} "install cramfs /bin/true" >> /etc/modprobe.d/disprotocols.conf
+            fcheck_error ${?} "Disable CRAMFS";
+            ### squashfs (Disable snap packages uses)
+            ${c_modprobe} -n -v squashfs | ${c_grep} "^install /bin/true$" || ${c_echo} "install squashfs /bin/true" >> /etc/modprobe.d/disprotocols.conf
+            fcheck_error ${?} "Disable squashfs";
+            ### udf (Necessary to read and write Opticals disks)
+            ${c_modprobe} -n -v udf | ${c_grep} "^install /bin/true$" || ${c_echo} "install udf /bin/true" >> /etc/modprobe.d/disprotocols.conf
+            fcheck_error ${?} "Disable UDF";
+            ### FAT (Old filesystem to windows system and USB sticks)
+            ${c_modprobe} -n -v fat | ${c_grep} "^install /bin/true$" || ${c_echo} "install fat /bin/true" >> /etc/modprobe.d/disprotocols.conf
+            fcheck_error ${?} "Disable FAT";
+
+            ## Disable features.
+            ### automount 
+            #### Verify (systemctl is-enabled autofs)
+            #### Disable (systemctl --now mask autofs)
+            ${c_systemctl} disable autofs.service
+            fcheck_error ${?} "Disable automount";
+            ### usb-storage
+            ${c_modprobe} -n -v usb-storage | ${c_grep} "^install /bin/true$" || ${c_echo} "install usb-storage /bin/true" >>  /etc/modprobe.d/disprotocols.conf
+            fcheck_error ${?} "Disable usb-storage";
+            ## coredumps
+            ${c_egrep} -q "^(\s*)\*\s+hard\s+core\s+\S+(\s*#.*)?\s*$" /etc/security/limits.conf && ${c_sed} -ri "s/^(\s*)\*\s+hard\s+core\s+\S+(\s*#.*)?\s*$/\1* hard core 0\2/" /etc/security/limits.conf || ${c_echo} "* hard core 0" >> /etc/security/limits.conf
+            fcheck_error ${?} "Disable Hard Core Dump";
+            ${c_egrep} -q "^(\s*)fs.suid_dumpable\s*=\s*\S+(\s*#.*)?\s*$" /etc/sysctl.conf && ${c_sed} -ri "s/^(\s*)fs.suid_dumpable\s*=\s*\S+(\s*#.*)?\s*$/\1fs.suid_dumpable = 0\2/" /etc/sysctl.conf || ${c_echo} "fs.suid_dumpable = 0" >> /etc/sysctl.conf
+            fcheck_error ${?} "Disable SUID Dumps";
+            ## ASLR.
+            ${c_egrep} -q "^(\s*)kernel.randomize_va_space\s*=\s*\S+(\s*#.*)?\s*$" /etc/sysctl.conf && ${c_sed} -ri "s/^(\s*)kernel.randomize_va_space\s*=\s*\S+(\s*#.*)?\s*$/\1kernel.randomize_va_space = 2\2/" /etc/sysctl.conf || ${c_echo} "kernel.randomize_va_space = 2" >> /etc/sysctl.conf
+            fcheck_error ${?} "Randomize VA Scpace";
+
+
             ## disable dccp
             ${c_modprobe} -n -v dccp | ${c_grep} "^install /bin/true$" || ${c_echo} "install dccp /bin/true" >> /etc/modprobe.d/disprotocols.conf
             fcheck_error ${?} "Disable DCCP"; 
@@ -172,9 +205,6 @@ f_hardening(){
             ## disable tipc
             ${c_modprobe} -n -v tipc | ${c_grep} "^install /bin/true$" || ${c_echo} "install tipc /bin/true" >> /etc/modprobe.d/disprotocols.conf
             fcheck_error ${?} "Disable TIPC";
-            ## disable cramfs
-            ${c_modprobe} -n -v cramfs | ${c_grep} "^install /bin/true$" || ${c_echo} "install cramfs /bin/true" >> /etc/modprobe.d/disprotocols.conf
-            fcheck_error ${?} "Disable CRAMFS";
             ## disable freevxfs
             ${c_modprobe} -n -v freevxfs | ${c_grep} "^install /bin/true$" || ${c_echo} "install freevxfs /bin/true" >> /etc/modprobe.d/disprotocols.conf
             fcheck_error ${?} "Disable freevxfs";
@@ -187,23 +217,6 @@ f_hardening(){
             ## disable hfsplus
             ${c_modprobe} -n -v hfsplus | ${c_grep} "^install /bin/true$" || ${c_echo} "install hfsplus /bin/true" >> /etc/modprobe.d/disprotocols.conf
              fcheck_error ${?} "Disable hfsplus";
-            ## disable squashfs
-            ${c_modprobe} -n -v squashfs | ${c_grep} "^install /bin/true$" || ${c_echo} "install squashfs /bin/true" >> /etc/modprobe.d/disprotocols.conf
-            fcheck_error ${?} "Disable squashfs";
-            ## disable udf
-            ${c_modprobe} -n -v udf | ${c_grep} "^install /bin/true$" || ${c_echo} "install udf /bin/true" >> /etc/modprobe.d/disprotocols.conf
-            fcheck_error ${?} "Disable UDF";
-            ## disable usb-storage
-            ${c_modprobe} -n -v usb-storage | ${c_grep} "^install /bin/true$" || ${c_echo} "install usb-storage /bin/true" >>  /etc/modprobe.d/disprotocols.conf
-            fcheck_error ${?} "Disable usb-storage";
-            ## disable automount
-            ${c_systemctl} disable autofs.service
-            fcheck_error ${?} "Disable automount";
-            ## Core Dumps restricted
-            ${c_egrep} -q "^(\s*)\*\s+hard\s+core\s+\S+(\s*#.*)?\s*$" /etc/security/limits.conf && ${c_sed} -ri "s/^(\s*)\*\s+hard\s+core\s+\S+(\s*#.*)?\s*$/\1* hard core 0\2/" /etc/security/limits.conf || ${c_echo} "* hard core 0" >> /etc/security/limits.conf
-            fcheck_error ${?} "Disable Hard Core Dump";
-            ${c_egrep} -q "^(\s*)fs.suid_dumpable\s*=\s*\S+(\s*#.*)?\s*$" /etc/sysctl.conf && ${c_sed} -ri "s/^(\s*)fs.suid_dumpable\s*=\s*\S+(\s*#.*)?\s*$/\1fs.suid_dumpable = 0\2/" /etc/sysctl.conf || ${c_echo} "fs.suid_dumpable = 0" >> /etc/sysctl.conf
-            fcheck_error ${?} "Disable SUID Dumps";
             ## Dmesg information restricted.
             ${c_echo} "kernel.dmesg_restrict = 1" >> /etc/sysctl.conf;
             fcheck_error ${?} "Dmesg information restricted";
@@ -213,9 +226,7 @@ f_hardening(){
             ## Disable addresses from proc.
             ${c_echo} "kernel.kptr_restrict = 1"  >> /etc/sysctl.conf;
             fcheck_error ${?} "Disable address from proc";
-            ## ASLR.
-            ${c_egrep} -q "^(\s*)kernel.randomize_va_space\s*=\s*\S+(\s*#.*)?\s*$" /etc/sysctl.conf && ${c_sed} -ri "s/^(\s*)kernel.randomize_va_space\s*=\s*\S+(\s*#.*)?\s*$/\1kernel.randomize_va_space = 2\2/" /etc/sysctl.conf || ${c_echo} "kernel.randomize_va_space = 2" >> /etc/sysctl.conf
-            fcheck_error ${?} "Randomize VA Scpace";
+
 
 
             # NETWORK
